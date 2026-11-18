@@ -1,4 +1,5 @@
 mod asr;
+mod dict;
 mod asr_context;
 mod agents;
 mod cloud;
@@ -1034,6 +1035,60 @@ fn delete_model(state: State<'_, AppState>, id: String) -> Res<()> {
 
 // ---- stored data and settings ------------------------------------------------------------------------
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Gloss {
+    surface: String,
+    lemma: String,
+    phonetic: String,
+    translation: String,
+    forms: Vec<String>,
+}
+
+fn gloss_of(g: dict::Gloss) -> Gloss {
+    Gloss { surface: g.surface, lemma: g.lemma, phonetic: g.phonetic, translation: g.translation, forms: g.forms }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VocabItem {
+    lemma: String,
+    phonetic: String,
+    translation: String,
+    forms: Vec<String>,
+}
+
+/// Off the main thread: the first call unpacks the dictionary.
+#[tauri::command(async)]
+fn lookup_word(word: String) -> Gloss { gloss_of(dict::lookup(&word)) }
+
+fn vocab_item(lemma: String) -> VocabItem {
+    let g = dict::lookup(&lemma);
+    let mut forms = if g.lemma == lemma { g.forms } else { dict::highlight_forms(&lemma) };
+    if !forms.iter().any(|f| f == &lemma) { forms.push(lemma.clone()); }
+    let (phonetic, translation) = if g.lemma == lemma { (g.phonetic, g.translation) } else { (String::new(), String::new()) };
+    VocabItem { lemma, phonetic, translation, forms }
+}
+
+#[tauri::command(async)]
+fn vocab_add(state: State<'_, AppState>, lemma: String) -> Res<VocabItem> {
+    let lemma = dict::normalize(&lemma);
+    if lemma.is_empty() { return Err("不是英文单词".into()); }
+    db::vocab_add(&state.db.lock().unwrap(), &lemma).map_err(e)?;
+    Ok(vocab_item(lemma))
+}
+
+#[tauri::command]
+fn vocab_remove(state: State<'_, AppState>, lemma: String) -> Res<()> {
+    db::vocab_remove(&state.db.lock().unwrap(), &dict::normalize(&lemma)).map_err(e)
+}
+
+#[tauri::command(async)]
+fn vocab_list(state: State<'_, AppState>) -> Res<Vec<VocabItem>> {
+    let lemmas = db::vocab_list(&state.db.lock().unwrap()).map_err(e)?;
+    Ok(lemmas.into_iter().map(vocab_item).collect())
+}
+
 #[tauri::command]
 fn get_blob(state: State<'_, AppState>, episode_id: String, kind: String) -> Res<Option<String>> {
     db::get_blob(&state.db.lock().unwrap(), &episode_id, &kind).map_err(e)
@@ -1257,7 +1312,8 @@ pub fn run() {
             add_subscription, refresh_show, refresh_all, list_shows, list_episodes, recent_episodes, get_episode, remove_show,
             set_progress, search_podcasts, search_show, load_transcript, fetch_official_transcript, transcribe, cancel_job, asr_models,
             download_model, delete_model, get_blob, set_blob, get_settings, set_settings, set_api_key, has_api_key, llm_chat, translate_texts, shared_transcript, shared_exists, shared_guide, share_guide, asr_elsewhere, log_listen, listening_stats, rescan_models, youtube_subscriptions, open_privacy_settings, export_opml, local_agents, probe_agent, agent_models, warm_agent, share_translation, ui_ready, ui_check, refresh_config, youtube_stream, prepare_youtube, youtube_tracks, use_youtube_track, qiaomu_detail, preview_show, list_models, tts_speak, cached_show, save_image, set_menu_labels,
-            download_episode, list_downloads, delete_download, clear_downloads, storage_info, open_data_folder, reveal_download, clear_temp, full_notes
+            download_episode, list_downloads, delete_download, clear_downloads, storage_info, open_data_folder, reveal_download, clear_temp, full_notes,
+            lookup_word, vocab_add, vocab_remove, vocab_list
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

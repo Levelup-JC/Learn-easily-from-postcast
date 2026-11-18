@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vocab-remove"
+description = "Enables the vocab_remove command without any pre-configured scope."
+commands.allow = ["vocab_remove"]
+
+[[permission]]
+identifier = "deny-vocab-remove"
+description = "Denies the vocab_remove command without any pre-configured scope."
+commands.deny = ["vocab_remove"]

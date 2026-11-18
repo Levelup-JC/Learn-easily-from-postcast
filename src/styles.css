@@ -218,6 +218,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .zh { color: var(--text); font-size: 15px; }
 .line.active .orig { color: var(--text); }
 mark { background: var(--mark); color: inherit; border-radius: 2px; }
+.word-tok { display: inline; padding: 0 1px; margin: 0; border: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; cursor: pointer; border-radius: 3px; }
+.word-tok:hover { background: var(--soft); }
+.word-tok.known { background: var(--accent-soft); color: var(--accent-text); }
+.vocab-pop { position: fixed; z-index: 40; width: 280px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); cursor: pointer; }
+.vocab-pop-word { font-weight: 600; margin-bottom: 4px; }
+.vocab-pop-word span, .vocab-row .muted { font-weight: 400; }
+.vocab-pop p { font-size: 13px; }
+.vocab-list { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; width: 280px; max-height: 360px; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 10px 28px rgba(0,0,0,0.14); }
+.vocab-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.vocab-row:last-child { border-bottom: 0; }
+.vocab-row > div { flex: 1; min-width: 0; }
+.vocab-row p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px; text-align: center; }
 .panel-empty .lead, .chat-intro .lead { font-size: 16px; font-weight: 600; }
 .panel-empty .muted { max-width: 360px; }

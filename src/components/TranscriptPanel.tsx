@@ -2,12 +2,13 @@ import { useShallow } from "zustand/react/shallow";
 import { SkeletonLines } from "./Skeleton";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { BookA, Check, ChevronDown, Ellipsis, Languages, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { BookA, BookMarked, Check, ChevronDown, Ellipsis, Languages, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { Modal } from "./Chrome";
 import type { EpisodeContext } from "../lib/ai";
 import { CassetteArt, FlatLineArt, NightNote, TrayArt, WaveToTextArt } from "./Illustrations";
 import { bytes } from "../lib/offline";
-import { api, errorText, rawErrorText, type Episode, type ModelInfo, type Segment } from "../lib/api";
+import { api, errorText, rawErrorText, type Episode, type Gloss, type ModelInfo, type Segment } from "../lib/api";
+import { splitOrig, useVocab, wordKey } from "../lib/vocab";
 import { clock, sizeMb } from "../lib/format";
 import { generateTranscript, llmReady, loadTranslation, needsTranslation, stopTranslation, switchYoutubeTrack, translateEpisode, useJobs } from "../lib/jobs";
 import { providerFor, useStore } from "../store";
@@ -33,19 +34,31 @@ function highlight(text: string, query: string) {
 
 const NO_SEGMENTS: Segment[] = [];
 
-const Row = memo(function Row({ seg, zh, active, mode, pending, onSeek, query, current }: { seg: Segment; zh?: string | null; active: boolean; mode: string; pending: boolean; onSeek: (t: number) => void; query: string; current: boolean }) {
+const Row = memo(function Row({ seg, zh, active, mode, pending, onSeek, onWord, query, current }: { seg: Segment; zh?: string | null; active: boolean; mode: string; pending: boolean; onSeek: (t: number) => void; onWord: (word: string, el: HTMLButtonElement) => void; query: string; current: boolean }) {
   const showZh = mode !== "original";
   const showOrig = mode !== "translation" || (!zh && !pending);
   return (
-    <div className={`line ${active ? "active" : ""} ${current ? "hit" : ""}`} data-active={active || undefined} data-hit={current || undefined} role="button" tabIndex={0} onClick={() => onSeek(seg.start)} onKeyDown={(e) => e.key === "Enter" && onSeek(seg.start)}>
+    <div className={`line ${active ? "active" : ""} ${current ? "hit" : ""}`} data-active={active || undefined} data-hit={current || undefined} tabIndex={0} onClick={() => onSeek(seg.start)} onKeyDown={(e) => e.key === "Enter" && onSeek(seg.start)}>
       <span className="line-time">{clock(seg.start)}</span>
       <div className="line-text">
         {showZh && (zh ? <p className="zh">{highlight(zh, query)}</p> : pending ? <span className="skeleton" /> : null)}
-        {showOrig && <p className="orig">{highlight(seg.text, query)}</p>}
+        {showOrig && <OrigText text={seg.text} query={query} onWord={onWord} />}
       </div>
     </div>
   );
 });
+
+function OrigText({ text, query, onWord }: { text: string; query: string; onWord: (word: string, el: HTMLButtonElement) => void }) {
+  const known = useVocab((s) => s.known);
+  const parts = useMemo(() => splitOrig(text), [text]);
+  return (
+    <p className="orig">
+      {parts.map((p, i) => p.word
+        ? <button type="button" key={i} className={known.has(wordKey(p.word)) ? "word-tok known" : "word-tok"} onClick={(e) => { e.stopPropagation(); onWord(p.word!, e.currentTarget); }}>{highlight(p.text, query)}</button>
+        : <span key={i}>{highlight(p.text, query)}</span>)}
+    </p>
+  );
+}
 
 function useModels() {
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -109,6 +122,50 @@ export function TranscriptPanel({ ep }: { ep: Episode }) {
   const active = useStore((s) => (s.current?.id === ep.id ? activeIndex(segments, s.time) : -1));
   // Stable, so the memoised rows don't all re-render whenever this panel does.
   const seek = useCallback((t: number) => { if (isCurrent) player?.seek(t); }, [isCurrent, player]);
+  const popRef = useRef<WordPop | null>(null);
+  const [pop, setPopState] = useState<WordPop | null>(null);
+  const setPop = (p: WordPop | null) => { popRef.current = p; setPopState(p); };
+  useEffect(() => { void useVocab.getState().load(); }, []);
+  useEffect(() => {
+    if (!pop) return;
+    const h = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (popRef.current?.el.contains(t)) return;
+      if (t.closest(".vocab-pop")) return;
+      setPop(null);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [pop]);
+  const toggleWord = useCallback(async (gloss: Gloss) => {
+    const v = useVocab.getState();
+    if (v.known.has(gloss.lemma)) await v.remove(gloss.lemma);
+    else await v.add(gloss);
+    setPop(null);
+  }, []);
+  const onWord = useCallback((word: string, el: HTMLButtonElement) => {
+    const surface = wordKey(word);
+    const cur = popRef.current;
+    if (cur && cur.surface === surface) {
+      if (!cur.gloss) { setPop({ ...cur, el, saveOnArrive: true }); return; }
+      void toggleWord(cur.gloss);
+      return;
+    }
+    setPop({ surface, gloss: null, el, saveOnArrive: false });
+    void api.lookupWord(word).then((gloss) => {
+      const now = popRef.current;
+      if (!now || now.surface !== surface) return;
+      setPop({ ...now, gloss });
+      if (now.saveOnArrive) void toggleWord(gloss);
+    }).catch((e) => {
+      const now = popRef.current;
+      if (!now || now.surface !== surface) return;
+      const gloss: Gloss = { surface, lemma: surface, phonetic: "", translation: "", forms: [surface] };
+      setPop({ ...now, gloss });
+      if (now.saveOnArrive) void toggleWord(gloss);
+      else useStore.getState().notify(t("查词失败：{error}", { error: errorText(e) }));
+    });
+  }, [toggleWord]);
   const wantsZh = transcript ? needsTranslation(transcript) : false;
   const mode = wantsZh ? settings.subtitleMode : "original";
 
@@ -158,6 +215,7 @@ export function TranscriptPanel({ ep }: { ep: Episode }) {
   );
   const searchBtn = <>
     {transcript.source.startsWith("youtube") && <TrackPicker ep={ep} language={transcript.language} auto={transcript.source === "youtube-auto"} />}
+    <VocabButton />
     <button className="icon-btn" title={t("搜索文稿（⌘F）")} onClick={() => { setSearching(true); setTimeout(() => searchInput.current?.focus(), 0); }}><Search size={15} /></button>
     {wantsZh && canUpgrade && <PanelMenu ep={ep} onRetranslate={() => start("llm")} />}
   </>;
@@ -189,7 +247,7 @@ export function TranscriptPanel({ ep }: { ep: Episode }) {
       )}
       <div className="lines" ref={list} onWheel={() => (userScrolled.current = Date.now())}>
         {rows.map((i, k) => (
-          <Row key={i} seg={segments[i]} zh={translation?.items[i]} active={i === active} mode={mode} pending={pending} onSeek={seek} query={query} current={!!matches && k === hit} />
+          <Row key={i} seg={segments[i]} zh={translation?.items[i]} active={i === active} mode={mode} pending={pending} onSeek={seek} onWord={onWord} query={query} current={!!matches && k === hit} />
         ))}
         {!matches && total > 0 && (
           <div className={`lines-end ${active === total - 1 ? "reached" : ""}`}>
@@ -198,6 +256,59 @@ export function TranscriptPanel({ ep }: { ep: Episode }) {
           </div>
         )}
       </div>
+      {pop && <WordPopup pop={pop} onToggle={() => { if (pop.gloss) void toggleWord(pop.gloss); else setPop({ ...pop, saveOnArrive: true }); }} />}
+    </div>
+  );
+}
+
+type WordPop = { surface: string; gloss: Gloss | null; el: HTMLButtonElement; saveOnArrive: boolean };
+
+function WordPopup({ pop, onToggle }: { pop: WordPop; onToggle: () => void }) {
+  const known = useVocab((s) => s.known);
+  const r = pop.el.getBoundingClientRect();
+  const below = r.bottom + 8;
+  const top = below + 160 > window.innerHeight ? Math.max(8, r.top - 148) : below;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - 292));
+  const saved = !!pop.gloss && known.has(pop.gloss.lemma);
+  return (
+    <div className="vocab-pop" style={{ top, left }} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+      <div className="vocab-pop-word">{pop.gloss?.lemma || pop.surface}{pop.gloss?.phonetic ? <span> /{pop.gloss.phonetic}/</span> : null}</div>
+      <p>{!pop.gloss ? t("正在查这个词…") : pop.gloss.translation || t("词典里没有这个词")}</p>
+      {pop.gloss && <p className="muted small">{saved ? t("已在生词库，再点一次移出") : t("再点一次，收入生词库")}</p>}
+    </div>
+  );
+}
+
+function VocabButton() {
+  const items = useVocab((s) => s.items);
+  const remove = useVocab((s) => s.remove);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useLang((s) => s.lang);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", h);
+    return () => document.removeEventListener("pointerdown", h);
+  }, [open]);
+  return (
+    <div className="panel-menu" ref={box}>
+      <button className="icon-btn" title={t("生词库")} aria-label={t("生词库")} aria-expanded={open} onClick={() => setOpen(!open)}><BookMarked size={15} /></button>
+      {open && (
+        <div className="vocab-list" role="dialog" aria-label={t("生词库")}>
+          {!items.length && <p className="muted small">{t("生词库是空的。点字幕里的英文单词看释义，再点一次就会存进来。")}</p>}
+          {items.map((it) => (
+            <div className="vocab-row" key={it.lemma}>
+              <div>
+                <b>{it.lemma}</b>
+                {it.phonetic ? <span className="muted"> /{it.phonetic}/</span> : null}
+                {it.translation ? <p className="muted small">{it.translation}</p> : null}
+              </div>
+              <button className="icon-btn sm" aria-label={t("移出")} onClick={() => void remove(it.lemma)}><X size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

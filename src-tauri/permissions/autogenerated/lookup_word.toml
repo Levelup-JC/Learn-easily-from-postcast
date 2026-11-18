@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lookup-word"
+description = "Enables the lookup_word command without any pre-configured scope."
+commands.allow = ["lookup_word"]
+
+[[permission]]
+identifier = "deny-lookup-word"
+description = "Denies the lookup_word command without any pre-configured scope."
+commands.deny = ["lookup_word"]

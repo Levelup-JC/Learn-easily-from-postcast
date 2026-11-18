@@ -1028,6 +1028,15 @@ const dict: Record<string, string> = {
   "回到 SubCast，会自动重试": "Come back to SubCast and it tries again",
   "打开系统设置": "Open System Settings",
   "系统会问是否允许 SubCast 读取 {name} 的数据，选「允许」。": "macOS will ask whether SubCast may read {name}'s data; choose Allow. ",
+  "生词库": "Saved words",
+  "正在查这个词…": "Looking it up…",
+  "词典里没有这个词": "This word isn't in the dictionary",
+  "再点一次，收入生词库": "Click again to save this word",
+  "已在生词库，再点一次移出": "Already saved. Click again to remove it",
+  "生词库是空的。点字幕里的英文单词看释义，再点一次就会存进来。": "No saved words yet. Click an English word in the subtitles to see its meaning, then click again to save it.",
+  "移出": "Remove",
+  "查词失败：{error}": "Couldn't look this word up: {error}",
+  "不是英文单词": "That isn't an English word",
 };
 
 export default dict;

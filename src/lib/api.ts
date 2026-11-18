@@ -118,7 +118,14 @@ export const api = {
   revealDownload: (episodeId: string) => invoke<void>("reveal_download", { episodeId }),
   clearTemp: () => invoke<void>("clear_temp"),
   fullNotes: (episodeId: string) => invoke<string | null>("full_notes", { episodeId }),
+  lookupWord: (word: string) => invoke<Gloss>("lookup_word", { word }),
+  vocabAdd: (lemma: string) => invoke<VocabItem>("vocab_add", { lemma }),
+  vocabRemove: (lemma: string) => invoke<void>("vocab_remove", { lemma }),
+  vocabList: () => invoke<VocabItem[]>("vocab_list"),
 };
+
+export interface Gloss { surface: string; lemma: string; phonetic: string; translation: string; forms: string[] }
+export interface VocabItem { lemma: string; phonetic: string; translation: string; forms: string[] }
 
 let llmCounter = 0;
 

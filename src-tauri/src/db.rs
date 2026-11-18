@@ -27,7 +27,8 @@ pub fn open(path: &Path) -> Result<Connection> {
         CREATE TABLE IF NOT EXISTS tr_cache(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         -- Time actually spent listening (playing, not seeking), per local day and hour, for 我的收听.
         CREATE TABLE IF NOT EXISTS listens(day TEXT NOT NULL, hour INTEGER NOT NULL, episode_id TEXT NOT NULL, show_id TEXT NOT NULL,
-            seconds REAL NOT NULL, translated INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day, hour, episode_id));",
+            seconds REAL NOT NULL, translated INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day, hour, episode_id));
+        CREATE TABLE IF NOT EXISTS vocab(lemma TEXT PRIMARY KEY, created_at INTEGER NOT NULL);",
     )?;
     let has_deep: bool = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('episodes') WHERE name='deep'", [], |r| r.get::<_, i64>(0))? > 0;
     if !has_deep {
@@ -231,6 +232,23 @@ pub fn listens_since(conn: &Connection, since: &str) -> Result<Vec<serde_json::V
         "duration": r.get::<_, f64>(11)?, "progress": r.get::<_, f64>(12)?, "published": r.get::<_, i64>(13)?,
     })))?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
+}
+
+pub fn vocab_add(conn: &Connection, lemma: &str) -> Result<()> {
+    conn.execute("INSERT OR IGNORE INTO vocab(lemma, created_at) VALUES(?1, ?2)", params![lemma, now_ms()])?;
+    Ok(())
+}
+
+pub fn vocab_remove(conn: &Connection, lemma: &str) -> Result<()> {
+    conn.execute("DELETE FROM vocab WHERE lemma=?1", [lemma])?;
+    Ok(())
+}
+
+/// Saved lemmas, newest first.
+pub fn vocab_list(conn: &Connection) -> Result<Vec<String>> {
+    let mut st = conn.prepare("SELECT lemma FROM vocab ORDER BY created_at DESC")?;
+    let rows = st.query_map([], |r| r.get(0))?.collect::<std::result::Result<Vec<String>, _>>()?;
+    Ok(rows)
 }
 
 #[cfg(test)]
