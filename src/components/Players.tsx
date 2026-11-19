@@ -23,6 +23,16 @@ export function playSoon(id: string) {
   if (s.current?.id === id && s.player) { s.player.play(); return; }
   s.set({ playWhenReady: id });
 }
+
+/** The play button drawn on the picture. Starts this episode — loading it first when another
+ *  one has the player — and pauses it once it is the one playing. A player that is still
+ *  loading (the embedded one takes a moment) starts as soon as it appears. */
+export function playThis(ep: Episode) {
+  const s = useStore.getState();
+  if (s.current?.id === ep.id && s.player) { s.player.toggle(); return; }
+  if (s.current?.id !== ep.id) s.load(ep);
+  playSoon(ep.id);
+}
 useStore.subscribe((s, prev) => {
   if (!s.player || s.player === prev.player) return;
   const p = s.player;
@@ -238,7 +248,7 @@ export function YouTubePlayer({ ep, overlay, onUnplayable }: { ep: Episode; over
   return (
     <div className={`video ${theater ? "theater" : ""} ${theater && idle ? "idle" : ""}`} ref={box}>
       {native ? <NativeVideo ep={ep} src={native.url} kind={native.kind} onFullscreen={fullscreen} onFail={failed} />
-        : direct ? <PlayHint ep={ep} show onClick={() => { useStore.getState().load(ep); playSoon(ep.id); }} />
+        : direct ? <PlayHint ep={ep} show onClick={() => playThis(ep)} />
         : <EmbedVideo ep={ep} onFullscreen={fullscreen} onBlocked={fallback} onError={setError} />}
       {fallingBack && <div className="video-note"><span className="spin-dot" /> {fallingBack} {openBtn}</div>}
       {botCheck && (
@@ -366,7 +376,7 @@ function EmbedVideo({ ep, onFullscreen, onBlocked, onError }: { ep: Episode; onF
   }, [ep.id]);
 
   useEffect(() => { playerRef.current?.setPlaybackRate?.(rate); }, [rate]);
-  const toggle = () => useStore.getState().player?.toggle();
+  const toggle = () => playThis(ep);
   return (
     <>
       <div className="video-host crop" ref={host} />
@@ -433,8 +443,8 @@ function NativeVideo({ ep, src, kind, onFullscreen, onFail }: { ep: Episode; src
         onPlaying={() => waiting(false)}
         onPause={(e) => { waiting(false); useStore.getState().set({ playing: false }); void api.setProgress(ep.id, e.currentTarget.currentTime); }}
         onEnded={(e) => { void api.setProgress(ep.id, e.currentTarget.duration); playNext(); }} />
-      <div className="video-shield" onClick={() => useStore.getState().player?.toggle()} onDoubleClick={onFullscreen} />
-      <PlayHint ep={ep} show={!started} onClick={() => useStore.getState().player?.toggle()} />
+      <div className="video-shield" onClick={() => playThis(ep)} onDoubleClick={onFullscreen} />
+      <PlayHint ep={ep} show={!started} onClick={() => playThis(ep)} />
     </>
   );
 }
