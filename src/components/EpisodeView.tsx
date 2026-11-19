@@ -28,7 +28,7 @@ import { isZh, useZh, useZhParagraphs } from "../lib/zh";
 import { autoTranslate, loadTranscript, useJobs } from "../lib/jobs";
 import { seekSoon, useStore } from "../store";
 import { ChatPanel, SummaryPanel } from "./AiPanels";
-import { Controls, playSoon } from "./Players";
+import { Controls, playSoon, playThis } from "./Players";
 import { VideoSlot } from "./VideoDock";
 import { bytes, cancelDownload, downloadEpisode, isSaved, removeDownload, useOffline } from "../lib/offline";
 import { showLinks } from "../lib/showLinks";
@@ -260,7 +260,7 @@ function DownloadButton({ ep }: { ep: Episode }) {
 function EpisodeBody({ ep, tab, setTab, startAudio }: { ep: Episode; tab: Tab; setTab: (t: Tab) => void; startAudio: boolean }) {
   // Feeds sometimes mark a deep-read that isn't there: then the tab goes away.
   const [noDeep, setNoDeep] = useState<string | null>(null);
-  const { current, load } = useStore(useShallow((s) => ({ current: s.current, load: s.load })));
+  const current = useStore((s) => s.current);
   const titleZh = useZh(ep.title);
   const isCurrent = current?.id === ep.id;
   const playing = useStore((s) => s.playing);
@@ -269,10 +269,8 @@ function EpisodeBody({ ep, tab, setTab, startAudio }: { ep: Episode; tab: Tab; s
   const transcript = useJobs((s) => s.transcripts[ep.id]);
   const mode = useStore((s) => s.settings.subtitleMode);
   useEffect(() => { if (transcript) autoTranslate(ep); }, [transcript, mode]);
-  const coverToggle = () => {
-    if (isCurrent) { useStore.getState().player?.toggle(); return; }
-    load(ep); playSoon(ep.id);
-  };
+  // The cover is the audio player. A video episode heard as audio must stay audio, not be loaded back as video.
+  const coverToggle = () => playThis(ep.videoId ? { ...ep, videoId: undefined } : ep);
   // When the player controls scroll out of view, a copy docks at the bottom of the column.
   const leftRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -356,9 +354,7 @@ function EpisodeBody({ ep, tab, setTab, startAudio }: { ep: Episode; tab: Tab; s
               <div className="audio-sub"><AudioSubtitles ep={ep} /></div>
             </div>
           )}
-          {isCurrent ? <div className="controls-slot" ref={controlsRef}><Controls /></div> : (
-            <button className="btn primary" onClick={() => { load(ep); playSoon(ep.id); }}><Play size={14} /> {t("播放这一集")}</button>
-          )}
+          {isCurrent && <div className="controls-slot" ref={controlsRef}><Controls /></div>}
           {ytPromo && ytChannel && <YtVideoStrip channel={ytChannel} name={showName(epShow?.title ?? "")} cover={epShow?.cover} />}
           {notes && <Notes ep={ep} text={notes} defaultOpen />}
           {isCurrent && docked && <div className="controls-dock"><Controls /></div>}

@@ -114,7 +114,6 @@ const dict: Record<string, string> = {
   "视频": "Video",
   "仅音频": "Audio only",
   "这个视频无法在应用内播放，已切换为音频": "This video can't play in the app, so it switched to audio",
-  "播放这一集": "Play this episode",
   "字幕栏宽度": "Subtitles panel width",
   "精读": "Deep read",
   "收起字幕栏（⌘\\）": "Hide subtitles panel (⌘\\)",
